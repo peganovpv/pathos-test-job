@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { countWords, parseDraft, splitSentences } from "../src/rubric/text.js";
+import { computeFacts } from "../src/rubric/facts.js";
+import { countWords, parseDraft } from "../src/rubric/text.js";
 
 export function loadFixture(name: string): string {
   return readFileSync(new URL(`./fixtures/${name}.md`, import.meta.url), "utf8");
@@ -13,23 +14,25 @@ export function loadFixture(name: string): string {
  */
 describe("fixture properties", () => {
   it("strong.md sits inside every ideal band", () => {
-    const draft = parseDraft(loadFixture("strong"));
-    const sentences = splitSentences(draft.body);
-    expect(countWords(draft.headline)).toBeGreaterThanOrEqual(6);
-    expect(countWords(draft.headline)).toBeLessThanOrEqual(12);
-    expect(countWords(draft.body)).toBeGreaterThanOrEqual(300);
-    expect(countWords(draft.body)).toBeLessThanOrEqual(500);
-    expect(countWords(draft.paragraphs[0]!)).toBeLessThanOrEqual(30);
-    expect(countWords(draft.body) / sentences.length).toBeLessThan(25);
+    const facts = computeFacts(parseDraft(loadFixture("strong")));
+    expect(facts.headlineWords).toBeGreaterThanOrEqual(6);
+    expect(facts.headlineWords).toBeLessThanOrEqual(12);
+    expect(facts.newsWords).toBeGreaterThanOrEqual(300);
+    expect(facts.newsWords).toBeLessThanOrEqual(500);
+    expect(facts.leadWords).toBeLessThanOrEqual(30);
+    expect(facts.meanSentenceWords).toBeLessThan(25);
+    expect(facts.dateline?.hasDate).toBe(true);
+    expect(facts.statements).toHaveLength(2);
   });
 
   it("weak.md breaks the length, lead and sentence bands", () => {
-    const draft = parseDraft(loadFixture("weak"));
-    const sentences = splitSentences(draft.body);
-    expect(countWords(draft.headline)).toBeGreaterThan(12);
-    expect(countWords(draft.body)).toBeGreaterThan(800);
-    expect(countWords(draft.paragraphs[0]!)).toBeGreaterThan(30);
-    expect(countWords(draft.body) / sentences.length).toBeGreaterThan(25);
+    const facts = computeFacts(parseDraft(loadFixture("weak")));
+    expect(facts.headlineWords).toBeGreaterThan(12);
+    expect(facts.newsWords).toBeGreaterThan(800);
+    expect(facts.leadWords).toBeGreaterThan(30);
+    expect(facts.meanSentenceWords).toBeGreaterThan(25);
+    expect(facts.statements).toEqual([]);
+    expect(facts.jargonTotal).toBeGreaterThan(10);
   });
 
   it("smart-quotes.md really does use typographic punctuation", () => {

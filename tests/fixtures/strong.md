@@ -14,6 +14,8 @@ The Salford kitchen is the largest of the three at 4,000 square feet and will al
 
 "Independent food producers scaling up in the North West is exactly what the growth fund exists for," said Tom Reilly, head of business lending at NatWest Manchester. "Pollen & Crumb had the demand and the discipline. They needed the ovens."
 
+Okafor said the company had turned down two acquisition approaches in the past year and intends to stay independent.
+
 Recruitment for the 45 roles opens on 20 March, with the Salford site trading from 4 May.
 
 About Pollen & Crumb
