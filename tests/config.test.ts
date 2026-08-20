@@ -42,3 +42,9 @@ describe("thresholds", () => {
     expect(() => loadThresholds("./does-not-exist.json")).toThrow(/cannot read config file/);
   });
 });
+
+describe("the documented example config", () => {
+  it("parses and matches the defaults, so the docs cannot drift", () => {
+    expect(loadThresholds("prq.config.example.json")).toEqual(DEFAULT_THRESHOLDS);
+  });
+});

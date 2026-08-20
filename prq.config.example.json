@@ -1,0 +1,14 @@
+{
+  "body": { "idealMin": 300, "idealMax": 500, "hardMin": 150, "hardMax": 800 },
+  "headline": { "idealMinWords": 6, "idealMaxWords": 12, "maxWords": 15, "maxChars": 120 },
+  "lead": { "maxWords": 30 },
+  "sentence": { "maxMeanWords": 25 },
+  "paragraph": { "maxSentences": 4, "maxWords": 80 },
+  "quotes": { "min": 1, "idealMax": 3, "maxWords": 40 },
+  "weights": {
+    "newsworthiness": 30,
+    "structure": 30,
+    "quoteability": 20,
+    "headline": 20
+  }
+}
