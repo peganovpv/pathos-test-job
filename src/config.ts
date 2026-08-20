@@ -44,6 +44,17 @@ export const ThresholdsSchema = z
         maxWords: positiveInt.default(40),
       })
       .prefault({}),
+    // Relative, not absolute: the overall score divides by the total weight of
+    // whichever categories actually ran, so dropping the LLM categories in
+    // offline mode renormalises without a second code path.
+    weights: z
+      .object({
+        newsworthiness: positiveInt.default(30),
+        structure: positiveInt.default(30),
+        quoteability: positiveInt.default(20),
+        headline: positiveInt.default(20),
+      })
+      .prefault({}),
   })
   .prefault({})
   .superRefine((t, ctx) => {

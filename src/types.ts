@@ -6,6 +6,7 @@ export interface Finding {
   message: string;
   evidence?: string;
   suggestion?: string;
+  category?: CategoryKey;
 }
 
 export interface Draft {
@@ -32,3 +33,7 @@ export interface QuoteStatement {
   spansParagraphs: boolean;
   unterminated: boolean;
 }
+
+export type CategoryKey = "newsworthiness" | "structure" | "quoteability" | "headline";
+
+export type Band = "ready" | "needs-work" | "rewrite";
