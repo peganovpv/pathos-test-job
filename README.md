@@ -46,12 +46,19 @@ npm test                                            # 222 tests, no network, no 
 npm run check -- tests/fixtures/weak.md --offline    # deterministic checks only
 ```
 
-For the full four-category score, set a key and drop `--offline`:
+For the full four-category score, set a credential and drop `--offline`:
 
 ```bash
-echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
+cp .env.example .env    # then fill in ANTHROPIC_API_KEY
 npm run check -- tests/fixtures/weak.md
 ```
+
+Either credential the SDK understands works. `ANTHROPIC_API_KEY` is sent as
+`x-api-key`; `ANTHROPIC_AUTH_TOKEN` is sent as `Authorization: Bearer`, for an
+`ant auth login` access token or a gateway in front of the API. The SDK only
+attaches the `anthropic-beta: oauth-2025-04-20` header on its resolved-profile
+path, never for a bare `ANTHROPIC_AUTH_TOKEN`, so `prq` adds it whenever bearer
+auth is in play — without it the API returns 401 on a valid token.
 
 The web UI is the same grader behind one page:
 

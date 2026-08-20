@@ -6,6 +6,7 @@ import { JudgmentSchema, parseJudgment } from "./schema.js";
 
 export const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 16000;
+const OAUTH_BETA = "oauth-2025-04-20";
 
 interface ParseResult {
   stop_reason?: string | null;
@@ -36,7 +37,7 @@ export interface AnthropicJudgeOptions {
  */
 function describeFailure(error: unknown): string {
   if (error instanceof Anthropic.AuthenticationError) {
-    return "the API rejected the credentials. Check ANTHROPIC_API_KEY, or run with --offline.";
+    return "the API rejected the credentials. Check ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, or run with --offline.";
   }
   if (error instanceof Anthropic.NotFoundError) {
     return "the model was not found. Check the id passed to --model.";
@@ -62,6 +63,17 @@ function describeFailure(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * A bearer token from `ant auth login` needs the OAuth beta header, and the SDK
+ * only attaches it on the resolved-profile path — never for a bare
+ * ANTHROPIC_AUTH_TOKEN. Without it the API answers 401 on a token that is
+ * perfectly valid, so it is added here whenever bearer auth is what is in play.
+ */
+export function clientOptions(env: NodeJS.ProcessEnv = process.env): ConstructorParameters<typeof Anthropic>[0] {
+  const usingBearerToken = !env["ANTHROPIC_API_KEY"] && Boolean(env["ANTHROPIC_AUTH_TOKEN"]);
+  return usingBearerToken ? { defaultHeaders: { "anthropic-beta": OAUTH_BETA } } : {};
+}
+
 export class AnthropicJudge implements Judge {
   readonly name: string;
   private readonly client: JudgeClient;
@@ -72,7 +84,7 @@ export class AnthropicJudge implements Judge {
     this.name = this.model;
     // One cast, at the boundary: the SDK client is structurally a JudgeClient
     // but its parse() signature is far wider than what is used here.
-    this.client = options.client ?? (new Anthropic() as unknown as JudgeClient);
+    this.client = options.client ?? (new Anthropic(clientOptions()) as unknown as JudgeClient);
   }
 
   async judge(input: JudgeInput): Promise<Judgment> {

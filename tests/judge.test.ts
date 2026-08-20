@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { AnthropicJudge, DEFAULT_MODEL, type JudgeClient } from "../src/llm/anthropic.js";
+import { AnthropicJudge, clientOptions, DEFAULT_MODEL, type JudgeClient } from "../src/llm/anthropic.js";
 import { JudgeError } from "../src/llm/port.js";
 import { buildUserMessage, SYSTEM_PROMPT } from "../src/llm/prompt.js";
 import { parseJudgment } from "../src/llm/schema.js";
@@ -195,5 +195,25 @@ describe("buildUserMessage", () => {
     const message = buildUserMessage(draft, facts);
     expect(message).toContain("Leeds Recycling Firm Wins");
     expect(message).toContain("Kirkgate Recovery has won");
+  });
+});
+
+describe("clientOptions", () => {
+  it("adds no default headers when an API key is in play", () => {
+    expect(clientOptions({ ANTHROPIC_API_KEY: "sk-ant-x" })).toEqual({});
+  });
+
+  it("adds the OAuth beta header when only a bearer token is set", () => {
+    expect(clientOptions({ ANTHROPIC_AUTH_TOKEN: "oat-x" })).toEqual({
+      defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
+    });
+  });
+
+  it("lets an API key win over a bearer token, matching the SDK's own order", () => {
+    expect(clientOptions({ ANTHROPIC_API_KEY: "sk-ant-x", ANTHROPIC_AUTH_TOKEN: "oat-x" })).toEqual({});
+  });
+
+  it("adds nothing when neither is set", () => {
+    expect(clientOptions({})).toEqual({});
   });
 });
