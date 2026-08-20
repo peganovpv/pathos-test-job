@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import {
   AnthropicJudge,
@@ -262,5 +264,35 @@ describe("AnthropicJudge construction", () => {
   it("never checks credentials when a client is injected", () => {
     const { client } = stub({ parsed_output: VALID });
     expect(() => new AnthropicJudge({ client })).not.toThrow();
+  });
+});
+
+describe("what the API schema actually constrains", () => {
+  /**
+   * This asserts a property of the SDK, not of our code, and it is the reason
+   * parseJudgment re-validates everything the model returns. The zod-to-JSON-
+   * Schema conversion renders value constraints as prose inside `description`
+   * rather than as schema keywords, so the API guarantees the response's shape
+   * and nothing about the numbers in it. If this test ever fails because the
+   * bounds became real keywords, the local re-validation can be relaxed.
+   */
+  it("renders numeric bounds as prose, not as schema keywords", () => {
+    const format = zodOutputFormat(z.object({ score: z.number().int().min(0).max(5) })) as {
+      schema: { properties: { score: Record<string, unknown> } };
+    };
+    const score = format.schema.properties.score;
+
+    expect(score["type"]).toBe("integer");
+    expect(score["minimum"]).toBeUndefined();
+    expect(score["maximum"]).toBeUndefined();
+    expect(score["description"]).toBe("{minimum: 0, maximum: 5}");
+  });
+
+  it("does the same to array length limits", () => {
+    const format = zodOutputFormat(z.object({ fixes: z.array(z.string()).max(3) })) as {
+      schema: { properties: { fixes: Record<string, unknown> } };
+    };
+    expect(format.schema.properties.fixes["maxItems"]).toBeUndefined();
+    expect(format.schema.properties.fixes["description"]).toBe("{maxItems: 3}");
   });
 });

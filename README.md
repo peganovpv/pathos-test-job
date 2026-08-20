@@ -42,7 +42,7 @@ That is the deterministic half. With an API key it also scores newsworthiness an
 
 ```bash
 npm install
-npm test                                            # 234 tests, no network, no API key needed
+npm test                                            # 236 tests, no network, no API key needed
 npm run check -- tests/fixtures/weak.md --offline    # deterministic checks only
 ```
 
@@ -140,7 +140,7 @@ Four decisions worth explaining:
 ## Tests
 
 ```bash
-npm test          # vitest, 234 tests
+npm test          # vitest, 236 tests
 npm run typecheck
 ```
 
