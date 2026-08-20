@@ -1,6 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { JudgeError, type Judge, type JudgeInput, type Judgment } from "./port.js";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  JudgeError,
+  MissingCredentialError,
+  type Judge,
+  type JudgeInput,
+  type Judgment,
+} from "./port.js";
 import { buildUserMessage, SYSTEM_PROMPT } from "./prompt.js";
 import { JudgmentSchema, parseJudgment } from "./schema.js";
 
@@ -74,6 +83,30 @@ export function clientOptions(env: NodeJS.ProcessEnv = process.env): Constructor
   return usingBearerToken ? { defaultHeaders: { "anthropic-beta": OAUTH_BETA } } : {};
 }
 
+/**
+ * The SDK throws a bare Error, before any request, when it cannot resolve a
+ * credential — not an AnthropicError, so it cannot be caught by class, and its
+ * message names internal option names rather than anything a user can act on.
+ * This check is deliberately conservative: it only reports a problem when no
+ * source at all is configured. If it is wrong, the SDK still runs and raises
+ * its own error, so nothing valid is ever turned away here.
+ */
+export function credentialAdvice(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_PROFILE",
+    "ANTHROPIC_FEDERATION_RULE_ID",
+  ].some((name) => Boolean(env[name]));
+
+  if (configured || existsSync(join(homedir(), ".config", "anthropic"))) return null;
+
+  return (
+    "no API credentials found. Put ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN in .env, " +
+    "or run with --offline to score the deterministic categories only."
+  );
+}
+
 export class AnthropicJudge implements Judge {
   readonly name: string;
   private readonly client: JudgeClient;
@@ -82,9 +115,17 @@ export class AnthropicJudge implements Judge {
   constructor(options: AnthropicJudgeOptions = {}) {
     this.model = options.model ?? process.env["PRQ_MODEL"] ?? DEFAULT_MODEL;
     this.name = this.model;
+    if (options.client) {
+      this.client = options.client;
+      return;
+    }
+
+    const advice = credentialAdvice();
+    if (advice !== null) throw new MissingCredentialError(advice);
+
     // One cast, at the boundary: the SDK client is structurally a JudgeClient
     // but its parse() signature is far wider than what is used here.
-    this.client = options.client ?? (new Anthropic(clientOptions()) as unknown as JudgeClient);
+    this.client = new Anthropic(clientOptions()) as unknown as JudgeClient;
   }
 
   async judge(input: JudgeInput): Promise<Judgment> {

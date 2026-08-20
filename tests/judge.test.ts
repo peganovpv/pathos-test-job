@@ -1,7 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
-import { AnthropicJudge, clientOptions, DEFAULT_MODEL, type JudgeClient } from "../src/llm/anthropic.js";
-import { JudgeError } from "../src/llm/port.js";
+import {
+  AnthropicJudge,
+  clientOptions,
+  credentialAdvice,
+  DEFAULT_MODEL,
+  type JudgeClient,
+} from "../src/llm/anthropic.js";
+import { JudgeError, MissingCredentialError } from "../src/llm/port.js";
 import { buildUserMessage, SYSTEM_PROMPT } from "../src/llm/prompt.js";
 import { parseJudgment } from "../src/llm/schema.js";
 import { computeFacts } from "../src/rubric/facts.js";
@@ -215,5 +221,46 @@ describe("clientOptions", () => {
 
   it("adds nothing when neither is set", () => {
     expect(clientOptions({})).toEqual({});
+  });
+});
+
+describe("credentialAdvice", () => {
+  const noProfileDir = { HOME: "/nonexistent-home-for-tests" };
+
+  it("advises when nothing at all is configured", () => {
+    expect(credentialAdvice(noProfileDir)).toMatch(/no API credentials found/);
+    expect(credentialAdvice(noProfileDir)).toMatch(/--offline/);
+  });
+
+  it.each([
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_PROFILE",
+    "ANTHROPIC_FEDERATION_RULE_ID",
+  ])("stays quiet when %s is set", (name) => {
+    expect(credentialAdvice({ ...noProfileDir, [name]: "x" })).toBeNull();
+  });
+
+  it("does not fire for an empty string, which the SDK also ignores", () => {
+    expect(credentialAdvice({ ...noProfileDir, ANTHROPIC_API_KEY: "" })).not.toBeNull();
+  });
+});
+
+describe("AnthropicJudge construction", () => {
+  it("refuses to build a real client with no credential, before any request", () => {
+    const home = process.env["HOME"];
+    process.env["HOME"] = "/nonexistent-home-for-tests";
+    try {
+      expect(() => new AnthropicJudge()).toThrow(MissingCredentialError);
+      expect(() => new AnthropicJudge()).toThrow(/no API credentials found/);
+    } finally {
+      if (home === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = home;
+    }
+  });
+
+  it("never checks credentials when a client is injected", () => {
+    const { client } = stub({ parsed_output: VALID });
+    expect(() => new AnthropicJudge({ client })).not.toThrow();
   });
 });

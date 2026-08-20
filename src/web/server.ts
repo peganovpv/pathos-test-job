@@ -5,7 +5,7 @@ import "dotenv/config";
 import express, { type Express, type Request, type Response } from "express";
 import { ConfigError, DEFAULT_THRESHOLDS, loadThresholds, type Thresholds } from "../config.js";
 import { AnthropicJudge } from "../llm/anthropic.js";
-import { JudgeError } from "../llm/port.js";
+import { JudgeError, MissingCredentialError } from "../llm/port.js";
 import { grade } from "../score.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +49,10 @@ export function createApp(options: AppOptions = {}): Express {
       });
       response.json({ ...report, offline });
     } catch (error) {
+      if (error instanceof MissingCredentialError) {
+        response.status(503).json({ error: error.message });
+        return;
+      }
       if (error instanceof JudgeError) {
         response.status(502).json({ error: error.message });
         return;

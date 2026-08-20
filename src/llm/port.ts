@@ -26,3 +26,6 @@ export interface Judge {
 }
 
 export class JudgeError extends Error {}
+
+/** No credential is configured at all — a setup problem, not a failed call. */
+export class MissingCredentialError extends JudgeError {}
