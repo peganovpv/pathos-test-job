@@ -1,4 +1,4 @@
-import type { Draft } from "../types.js";
+import type { Draft, Quote, QuoteStatement } from "../types.js";
 
 const ABBREVIATIONS = new Set([
   "mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st",
@@ -84,4 +84,162 @@ export function parseDraft(raw: string): Draft {
   const body = lines.slice(headlineIndex + 1).join("\n");
 
   return { raw, headline, body, paragraphs: splitParagraphs(body) };
+}
+
+const DOUBLE_QUOTE = '"';
+
+const NAME = "(?:[A-Z][\\w'-]*\\s+){0,3}[A-Z][\\w'-]*";
+const VERBS = "said|says|added|commented|explained|noted";
+
+/**
+ * Ordered most specific first: "Ruth Ellery, executive member, said" has to be
+ * tried before "said <Name>", or the title clause swallows the name.
+ */
+const ATTRIBUTION_PATTERNS = [
+  new RegExp(`\\b(${NAME})\\s*,[^.]{0,90},\\s*(?:${VERBS})\\b`),
+  new RegExp(`\\b(?:${VERBS})\\s+(${NAME})`),
+  new RegExp(`\\b(${NAME})\\s*,?\\s+(?:${VERBS})\\b`),
+];
+
+function matchAttribution(context: string): string | null {
+  for (const pattern of ATTRIBUTION_PATTERNS) {
+    const match = pattern.exec(context);
+    if (match) return match[1]!.trim();
+  }
+  return null;
+}
+
+/**
+ * The window is deliberately narrow — the text between this quote and its
+ * neighbours, not the whole paragraph. A paragraph carrying two speakers would
+ * otherwise attribute both quotes to whichever name appeared first, and putting
+ * words in the wrong person's mouth is worse than reporting no attribution.
+ * Text after the quote wins, since "…," said X is the commoner construction.
+ */
+function attributionFor(before: string, after: string): string | null {
+  return matchAttribution(after) ?? matchAttribution(before);
+}
+
+interface PendingQuote {
+  parts: string[];
+  startParagraph: number;
+  before: string;
+}
+
+function windowAfter(paragraph: string, close: number): string {
+  const next = paragraph.indexOf(DOUBLE_QUOTE, close + 1);
+  return next === -1 ? paragraph.slice(close + 1) : paragraph.slice(close + 1, next);
+}
+
+function buildQuote(
+  pending: PendingQuote,
+  after: string,
+  endParagraph: number,
+  unterminated: boolean,
+): Quote {
+  const text = pending.parts.join(" ").replace(/\s+/g, " ").trim();
+  return {
+    text,
+    words: countWords(text),
+    attribution: attributionFor(pending.before, after),
+    spansParagraphs: endParagraph > pending.startParagraph,
+    unterminated,
+  };
+}
+
+/**
+ * Only double quotes delimit a quote. Single quotes are left alone because in
+ * running prose they are overwhelmingly apostrophes, and typographic
+ * apostrophes are folded onto them by normalizePunctuation.
+ */
+export function extractQuotes(body: string): Quote[] {
+  const paragraphs = splitParagraphs(normalizePunctuation(body));
+  const quotes: Quote[] = [];
+  let pending: PendingQuote | null = null;
+
+  paragraphs.forEach((paragraph, index) => {
+    let cursor = 0;
+
+    if (pending) {
+      // A quote continued across a paragraph break re-opens with a quote mark
+      // and never closed the previous paragraph. Drop the continuation marker.
+      if (paragraph.startsWith(DOUBLE_QUOTE)) cursor = 1;
+      const close = paragraph.indexOf(DOUBLE_QUOTE, cursor);
+      if (close === -1) {
+        pending.parts.push(paragraph.slice(cursor));
+        return;
+      }
+      pending.parts.push(paragraph.slice(cursor, close));
+      quotes.push(buildQuote(pending, windowAfter(paragraph, close), index, false));
+      pending = null;
+      cursor = close + 1;
+    }
+
+    for (;;) {
+      const open = paragraph.indexOf(DOUBLE_QUOTE, cursor);
+      if (open === -1) break;
+
+      const before = paragraph.slice(cursor, open);
+      const close = paragraph.indexOf(DOUBLE_QUOTE, open + 1);
+
+      if (close === -1) {
+        pending = { parts: [paragraph.slice(open + 1)], startParagraph: index, before };
+        break;
+      }
+
+      quotes.push(
+        buildQuote(
+          { parts: [paragraph.slice(open + 1, close)], startParagraph: index, before },
+          windowAfter(paragraph, close),
+          index,
+          false,
+        ),
+      );
+      cursor = close + 1;
+    }
+  });
+
+  if (pending) {
+    quotes.push(buildQuote(pending, "", paragraphs.length - 1, true));
+  }
+
+  return quotes;
+}
+
+/**
+ * `"A." said Okafor. "B."` is house style for one quote interrupted by
+ * attribution, not two quotes. Counting passages would flag a correctly
+ * written release for having too many quotes, so consecutive passages sharing
+ * an attribution are merged into a single statement.
+ */
+export function collectStatements(quotes: Quote[]): QuoteStatement[] {
+  const statements: QuoteStatement[] = [];
+
+  for (const quote of quotes) {
+    const previous = statements.at(-1);
+    const mergeable =
+      previous !== undefined &&
+      previous.attribution !== null &&
+      previous.attribution === quote.attribution;
+
+    if (mergeable) {
+      previous.text = `${previous.text} ${quote.text}`.replace(/\s+/g, " ").trim();
+      previous.words = countWords(previous.text);
+      previous.passages += 1;
+      previous.spansParagraphs ||= quote.spansParagraphs;
+      previous.unterminated ||= quote.unterminated;
+      continue;
+    }
+
+    statements.push({
+      text: quote.text,
+      words: quote.words,
+      attribution: quote.attribution,
+      passages: 1,
+      spansParagraphs: quote.spansParagraphs,
+      unterminated: quote.unterminated,
+    });
+  }
+
+  return statements;
 }
