@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Press release quality check</title>
+    <style>
+      :root {
+        --bg: #fbfbf9;
+        --panel: #ffffff;
+        --ink: #1a1a18;
+        --muted: #6b6b66;
+        --line: #e3e3de;
+        --high: #b3261e;
+        --medium: #a06800;
+        --low: #6b6b66;
+        --good: #1f6f43;
+        --accent: #1a1a18;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16161a;
+          --panel: #1e1e23;
+          --ink: #f2f2ef;
+          --muted: #a0a099;
+          --line: #303038;
+          --high: #ff8a80;
+          --medium: #e8b339;
+          --low: #a0a099;
+          --good: #6cd39a;
+          --accent: #f2f2ef;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+      }
+      main { max-width: 60rem; margin: 0 auto; }
+      h1 { font-size: 1.4rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+      .sub { color: var(--muted); margin: 0 0 1.75rem; }
+      .grid { display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
+      @media (min-width: 62rem) { .grid { grid-template-columns: 1fr 1fr; } }
+      textarea {
+        width: 100%;
+        min-height: 24rem;
+        padding: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+        font: 14px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+        resize: vertical;
+      }
+      .controls { display: flex; align-items: center; gap: 1rem; margin-top: 0.85rem; flex-wrap: wrap; }
+      button {
+        padding: 0.6rem 1.15rem;
+        border: 0;
+        border-radius: 7px;
+        background: var(--accent);
+        color: var(--bg);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button[disabled] { opacity: 0.5; cursor: progress; }
+      label { color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 1.25rem;
+      }
+      .placeholder { color: var(--muted); }
+      .overall { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 1.1rem; }
+      .overall b { font-size: 2.4rem; letter-spacing: -0.03em; }
+      .band { font-weight: 600; }
+      .band.ready { color: var(--good); }
+      .band.needs-work { color: var(--medium); }
+      .band.rewrite { color: var(--high); }
+      .cat { margin-bottom: 0.9rem; }
+      .cat-head { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.9rem; }
+      .cat-head span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+      .track { height: 6px; border-radius: 3px; background: var(--line); margin: 0.35rem 0 0.3rem; }
+      .fill { height: 100%; border-radius: 3px; background: var(--accent); }
+      .rationale { color: var(--muted); font-size: 0.88rem; }
+      h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 1.6rem 0 0.6rem; }
+      ol { margin: 0; padding-left: 1.3rem; }
+      ol li { margin-bottom: 0.8rem; }
+      .sev { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+      .sev.high { color: var(--high); }
+      .sev.medium { color: var(--medium); }
+      .sev.low { color: var(--low); }
+      blockquote { margin: 0.3rem 0; color: var(--muted); font-style: italic; }
+      .fix { color: var(--ink); }
+      .measured, .note { color: var(--muted); font-size: 0.88rem; }
+      .note { border-left: 2px solid var(--line); padding-left: 0.7rem; margin: 1rem 0; }
+      .error { color: var(--high); }
+      ul.headlines { margin: 0; padding-left: 1.2rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Press release quality check</h1>
+      <p class="sub">Paste a draft. It is scored against a PR rubric and told what to fix first.</p>
+
+      <div class="grid">
+        <section>
+          <textarea id="draft" spellcheck="false" placeholder="Headline on the first line.
+
+CITY, Country — Date — then the news in one sentence…"></textarea>
+          <div class="controls">
+            <button id="score">Score it</button>
+            <label><input type="checkbox" id="offline" /> Skip the model call</label>
+            <span class="measured" id="status"></span>
+          </div>
+        </section>
+        <section class="panel" id="out">
+          <p class="placeholder">No draft scored yet.</p>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const esc = (value) =>
+        String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+      const bandLabel = { ready: "Ready to send", "needs-work": "Needs work", rewrite: "Rewrite" };
+
+      function renderCategory(category) {
+        return `
+          <div class="cat">
+            <div class="cat-head">
+              <span>${esc(category.label)}</span>
+              <span>${Number.isInteger(category.score) ? category.score : category.score.toFixed(1)}/5 · ${esc(category.source)}</span>
+            </div>
+            <div class="track"><div class="fill" style="width:${(category.score / 5) * 100}%"></div></div>
+            ${category.rationale ? `<div class="rationale">${esc(category.rationale)}</div>` : ""}
+          </div>`;
+      }
+
+      function renderFix(finding) {
+        return `
+          <li>
+            <div><span class="sev ${esc(finding.severity)}">${esc(finding.severity)}</span> ${esc(finding.message)}</div>
+            ${finding.evidence ? `<blockquote>“${esc(finding.evidence)}”</blockquote>` : ""}
+            ${finding.suggestion ? `<div class="fix">→ ${esc(finding.suggestion)}</div>` : ""}
+          </li>`;
+      }
+
+      function render(report) {
+        const f = report.facts;
+        const skipped = report.skipped.length
+          ? `<p class="note">${esc(report.skipped.join(" and "))} were not scored — no model call was made, so the overall is out of the remaining categories.</p>`
+          : "";
+        const fixes = report.topFixes.length
+          ? `<h2>What to fix first</h2><ol>${report.topFixes.slice(0, 6).map(renderFix).join("")}</ol>`
+          : `<h2>What to fix first</h2><p class="measured">Nothing flagged.</p>`;
+        const headlines = report.suggestedHeadlines.length
+          ? `<h2>Suggested headlines</h2><ul class="headlines">${report.suggestedHeadlines.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`
+          : "";
+
+        $("out").innerHTML = `
+          <div class="overall">
+            <b>${report.overall}</b><span class="measured">/ 100</span>
+            <span class="band ${esc(report.band)}">${esc(bandLabel[report.band] ?? report.band)}</span>
+          </div>
+          ${report.categories.map(renderCategory).join("")}
+          ${skipped}
+          ${fixes}
+          ${headlines}
+          ${report.verdict ? `<h2>Verdict</h2><p>${esc(report.verdict)}</p>` : ""}
+          <h2>Measured</h2>
+          <p class="measured">
+            ${f.newsWords} words · ${f.paragraphs} paragraphs · mean sentence ${f.meanSentenceWords} words<br />
+            ${f.quotes} quotes (${f.attributedQuotes} attributed) ·
+            ${f.hasDateline ? "dateline" : "no dateline"} ·
+            ${f.hasContact ? "contact details" : "no contact details"} ·
+            ${f.jargonInstances} jargon instances
+          </p>`;
+      }
+
+      async function score() {
+        const draft = $("draft").value;
+        if (!draft.trim()) {
+          $("out").innerHTML = `<p class="error">Paste a draft press release first.</p>`;
+          return;
+        }
+
+        $("score").disabled = true;
+        $("status").textContent = $("offline").checked ? "checking…" : "asking the model…";
+
+        try {
+          const response = await fetch("/api/check", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ draft, offline: $("offline").checked }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            $("out").innerHTML = `<p class="error">${esc(payload.error ?? "Scoring failed.")}</p>`;
+            return;
+          }
+          render(payload);
+        } catch {
+          $("out").innerHTML = `<p class="error">Could not reach the server.</p>`;
+        } finally {
+          $("score").disabled = false;
+          $("status").textContent = "";
+        }
+      }
+
+      $("score").addEventListener("click", score);
+      $("draft").addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") score();
+      });
+    </script>
+  </body>
+</html>

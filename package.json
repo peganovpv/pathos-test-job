@@ -8,7 +8,7 @@
     "prq": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/web/index.html dist/web/index.html",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
